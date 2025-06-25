@@ -5,6 +5,7 @@ import 'widgets/recurrence_label.dart';
 import 'task_model.dart';
 import 'task_create_dialog.dart';
 import 'logic/task_list_logic.dart';
+import 'widgets/task_list_widget.dart';
 
 class TaskListView extends StatefulWidget {
   final String vaultPath;
@@ -38,55 +39,63 @@ class TaskListViewState extends State<TaskListView> {
           if (items.isEmpty) {
             return Center(child: Text('No tasks in \\${widget.view}.', style: textTheme.bodySmall));
           }
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 15),
-            itemExtent: 48,
-            itemCount: items.length,
-            itemBuilder: (context, idx) {
-              final item = items[idx];
-              if (item.isHeader) {
-                final date = item.date!;
-                final friendly = '${_weekdayName(date.weekday)}, ${_monthName(date.month)} ${date.day}, ${date.year}';
-                return Padding(
+          // Group items by header and tasks for display
+          final List<Widget> children = [];
+          List<Task> currentGroup = [];
+          String? currentHeader;
+          for (final item in items) {
+            if (item.isHeader) {
+              if (currentGroup.isNotEmpty && currentHeader != null) {
+                children.add(Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                  child: Text(friendly, style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
-                );
-              } else {
-                final task = item.task!;
-                return Column(
-                  children: [
-                    ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                    minVerticalPadding: 0,
-                    leading: IconButton(
-                      icon: const Icon(Icons.radio_button_unchecked, size: 16),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Mark done',
-                      onPressed: () => _markTaskDone(task),
-                    ),
-                    title: Row(
-                      children: [
-                        Flexible(child: Text(task.title, style: textTheme.bodySmall)),
-                        if (task.recurring != null && task.recurring!.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          RecurrenceLabel(task.recurring),
-                        ],
-                      ],
-                    ),
-                    subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.bodySmall) : null,
-                    onTap: () => _editTask(task),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 16),
-                      tooltip: 'Delete task',
-                      onPressed: () => _confirmDeleteTask(task),
-                    ),
-                  ),
-                  const Divider(height: 1, thickness: 1, indent: 20, color: Colors.grey)
-                  ],
-                );
+                  child: Text(currentHeader, style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+                ));
+                children.add(TaskListWidget(
+                  tasks: List<Task>.from(currentGroup),
+                  onMarkDone: _markTaskDone,
+                  onEdit: _editTask,
+                  onDelete: _confirmDeleteTask,
+                  titleStyle: textTheme.bodySmall,
+                  subtitleStyle: textTheme.bodySmall,
+                  reorderable: false,
+                  // Prevent nested scrollables
+                  leadingBuilder: null,
+                  // Use shrinkWrap and disable scrolling for inner lists
+                  key: ValueKey(currentHeader),
+                  // Custom build: pass shrinkWrap/physics via a builder
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                ));
+                currentGroup = [];
               }
-            },
+              final date = item.date!;
+              currentHeader = '${_weekdayName(date.weekday)}, ${_monthName(date.month)} ${date.day}, ${date.year}';
+            } else {
+              currentGroup.add(item.task!);
+            }
+          }
+          if (currentGroup.isNotEmpty && currentHeader != null) {
+            children.add(Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              child: Text(currentHeader, style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+            ));
+            children.add(TaskListWidget(
+              tasks: List<Task>.from(currentGroup),
+              onMarkDone: _markTaskDone,
+              onEdit: _editTask,
+              onDelete: _confirmDeleteTask,
+              titleStyle: textTheme.bodySmall,
+              subtitleStyle: textTheme.bodySmall,
+              reorderable: false,
+              leadingBuilder: null,
+              key: ValueKey(currentHeader),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+            ));
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            children: children,
           );
         },
       );
@@ -113,86 +122,99 @@ class TaskListViewState extends State<TaskListView> {
           if (overdue.isEmpty && today.isEmpty) {
             return Center(child: Text('No tasks in Today.'));
           }
-          return ListView(
-            children: [
-              if (overdue.isNotEmpty) ...[
+          if (overdue.isNotEmpty && today.isNotEmpty) {
+            return Column(
+              children: [
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Text('Overdue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
                 ),
-                ...overdue.map((task) => ListTile(
-                  leading: IconButton(
-                    icon: const Icon(Icons.warning, color: Colors.red),
-                    tooltip: 'Overdue',
-                    onPressed: () => _markTaskDone(task),
+                Expanded(
+                  child: TaskListWidget(
+                    tasks: overdue,
+                    onMarkDone: _markTaskDone,
+                    onEdit: _editTask,
+                    onDelete: _confirmDeleteTask,
+                    titleStyle: textTheme.bodySmall,
+                    subtitleStyle: textTheme.bodySmall,
                   ),
-                  title: Text(task.title),
-                  subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
-                  onTap: () => _editTask(task),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    tooltip: 'Delete task',
-                    onPressed: () => _confirmDeleteTask(task),
-                  ),
-                )),
-              ],
-              if (today.isNotEmpty) ...[
+                ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Text('Today', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
-                ReorderableListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: today.length,
-                  onReorder: (oldIndex, newIndex) async {
-                    setState(() {
-                      if (newIndex > oldIndex) newIndex--;
-                      final item = today.removeAt(oldIndex);
-                      today.insert(newIndex, item);
-                    });
-                    await TaskListLogic.saveOrder(today, todayDirPath);
-                  },
-                  itemBuilder: (context, idx) {
-                    final task = today[idx];
-                    return ListTile(
-                      key: ValueKey(task.filePath),
-                      leading: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ReorderableDragStartListener(
-                            index: idx,
-                            child: const Icon(Icons.drag_handle, color: Colors.grey),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.check_box_outline_blank),
-                            tooltip: 'Mark done',
-                            onPressed: () => _markTaskDone(task),
-                          ),
-                        ],
-                      ),
-                      title: Row(
-                        children: [
-                          Text(task.title),
-                          if (task.recurring != null && task.recurring!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            RecurrenceLabel(task.recurring),
-                          ],
-                        ],
-                      ),
-                      subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
-                      onTap: () => _editTask(task),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        tooltip: 'Delete task',
-                        onPressed: () => _confirmDeleteTask(task),
-                      ),
-                    );
-                  },
+                Expanded(
+                  child: TaskListWidget(
+                    tasks: today,
+                    onMarkDone: _markTaskDone,
+                    onEdit: _editTask,
+                    onDelete: _confirmDeleteTask,
+                    reorderable: true,
+                    onReorder: (oldIndex, newIndex) async {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final item = today.removeAt(oldIndex);
+                        today.insert(newIndex, item);
+                      });
+                      await TaskListLogic.saveOrder(today, todayDirPath);
+                    },
+                    showDragHandle: true,
+                    titleStyle: textTheme.bodySmall,
+                    subtitleStyle: textTheme.bodySmall,
+                  ),
                 ),
               ],
-            ],
-          );
+            );
+          } else if (overdue.isNotEmpty) {
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Text('Overdue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+                ),
+                Expanded(
+                  child: TaskListWidget(
+                    tasks: overdue,
+                    onMarkDone: _markTaskDone,
+                    onEdit: _editTask,
+                    onDelete: _confirmDeleteTask,
+                    titleStyle: textTheme.bodySmall,
+                    subtitleStyle: textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // today.isNotEmpty
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Text('Today', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: TaskListWidget(
+                    tasks: today,
+                    onMarkDone: _markTaskDone,
+                    onEdit: _editTask,
+                    onDelete: _confirmDeleteTask,
+                    reorderable: true,
+                    onReorder: (oldIndex, newIndex) async {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final item = today.removeAt(oldIndex);
+                        today.insert(newIndex, item);
+                      });
+                      await TaskListLogic.saveOrder(today, todayDirPath);
+                    },
+                    showDragHandle: true,
+                    titleStyle: textTheme.bodySmall,
+                    subtitleStyle: textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            );
+          }
         },
       );
     }
@@ -211,8 +233,12 @@ class TaskListViewState extends State<TaskListView> {
           if (tasks.isEmpty) {
             return Center(child: Text('No tasks in Inbox.'));
           }
-          return ReorderableListView.builder(
-            itemCount: tasks.length,
+          return TaskListWidget(
+            tasks: tasks,
+            onMarkDone: _markTaskDone,
+            onEdit: _editTask,
+            onDelete: _confirmDeleteTask,
+            reorderable: true,
             onReorder: (oldIndex, newIndex) async {
               setState(() {
                 if (newIndex > oldIndex) newIndex--;
@@ -221,42 +247,9 @@ class TaskListViewState extends State<TaskListView> {
               });
               await TaskListLogic.saveOrder(tasks, '${widget.vaultPath}/inbox');
             },
-            itemBuilder: (context, idx) {
-              final task = tasks[idx];
-              return ListTile(
-                key: ValueKey(task.filePath),
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ReorderableDragStartListener(
-                      index: idx,
-                      child: const Icon(Icons.drag_handle, color: Colors.grey),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.check_box_outline_blank),
-                      tooltip: 'Mark done',
-                      onPressed: () => _markTaskDone(task),
-                    ),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Text(task.title),
-                    if (task.recurring != null && task.recurring!.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      RecurrenceLabel(task.recurring),
-                    ],
-                  ],
-                ),
-                subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
-                onTap: () => _editTask(task),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Delete task',
-                  onPressed: () => _confirmDeleteTask(task),
-                ),
-              );
-            },
+            showDragHandle: true,
+            titleStyle: textTheme.bodySmall,
+            subtitleStyle: textTheme.bodySmall,
           );
         },
       );
@@ -276,38 +269,80 @@ class TaskListViewState extends State<TaskListView> {
           if (tasks.isEmpty) {
             return Center(child: Text('No recurring tasks.'));
           }
-          return ListView.builder(
-            itemCount: tasks.length,
-            itemBuilder: (context, idx) {
-              final task = tasks[idx];
-              return ListTile(
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.repeat, color: Colors.blue),
-                    IconButton(
-                      icon: const Icon(Icons.check_box_outline_blank),
-                      tooltip: 'Mark done',
-                      onPressed: () => _markTaskDone(task),
-                    ),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Text(task.title),
-                    const SizedBox(width: 8),
-                    RecurrenceLabel(task.recurring),
-                  ],
-                ),
-                subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
-                onTap: () => _editTask(task),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Delete task',
-                  onPressed: () => _confirmDeleteTask(task),
-                ),
-              );
-            },
+          // --- Begin: Auto-create missing recurring instances logic ---
+          Future.microtask(() async {
+            bool created = false;
+            for (final task in tasks) {
+              // Only create a new instance if this task is NOT itself a recurring template (i.e., only if it is a dated instance)
+              // Recurring templates should not have a dueDate in the future or present, only in the past (or null)
+              // So, only create a new instance if the dueDate is in the past (before today)
+              if (task.recurring != null && task.recurring!.isNotEmpty && task.dueDate != null && task.dueDate!.isNotEmpty) {
+                final dueDate = _parseDueDate(task.dueDate!);
+                final now = DateTime.now();
+                if (dueDate != null && dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
+                  final nextDue = _nextRecurrenceDate(task.dueDate!, task.recurring!, isFirstInstance: false);
+                  if (nextDue != null) {
+                    final yyyy = nextDue.year.toString().padLeft(4, '0');
+                    final mm = nextDue.month.toString().padLeft(2, '0');
+                    final dd = nextDue.day.toString().padLeft(2, '0');
+                    final folder = Directory('${widget.vaultPath}/by-date/$yyyy/$mm/$dd');
+                    if (!await folder.exists()) await folder.create(recursive: true);
+                    final safeTitle = task.title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+                    // Check if an instance for this title and due date already exists
+                    final files = await folder.list().where((e) => e is File && e.path.endsWith('.md')).cast<File>().toList();
+                    bool instanceExists = false;
+                    for (final file in files) {
+                      final text = await file.readAsString();
+                      final titleMatch = RegExp(r'title:\s*"?([^\"]+)"?').firstMatch(text);
+                      final dueMatch = RegExp(r'due:\s*"?(\d{4}-\d{2}-\d{2})"?').firstMatch(text);
+                      if (titleMatch != null && dueMatch != null &&
+                          titleMatch.group(1)?.trim() == task.title.trim() &&
+                          dueMatch.group(1) == '$yyyy-$mm-$dd') {
+                        instanceExists = true;
+                        break;
+                      }
+                    }
+                    if (!instanceExists) {
+                      final nextFile = File('${folder.path}/$safeTitle-${nextDue.millisecondsSinceEpoch}.md');
+                      final nextFrontmatter = StringBuffer('---\n');
+                      nextFrontmatter.writeln('title: "${task.title}"');
+                      nextFrontmatter.writeln('due: "$yyyy-$mm-$dd"');
+                      nextFrontmatter.writeln('recurring: "${task.recurring}"');
+                      nextFrontmatter.writeln('done: false');
+                      nextFrontmatter.writeln('---\n');
+                      await nextFile.writeAsString(nextFrontmatter.toString() + task.content.trim());
+                      created = true;
+                    }
+                  }
+                }
+              }
+            }
+            if (created && mounted) setState(() {});
+          });
+          // --- End: Auto-create missing recurring instances logic ---
+          return TaskListWidget(
+            tasks: tasks,
+            onMarkDone: _markTaskDone,
+            onEdit: _editTask,
+            onDelete: _confirmDeleteTask,
+            // Recurring tasks always have recurrence, so RecurrenceLabel will be shown in TaskListWidget
+            titleStyle: textTheme.bodySmall,
+            subtitleStyle: textTheme.bodySmall,
+            leadingBuilder: (context, task, idx) => SizedBox(
+              width: 56,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.repeat, color: Colors.blue, size: 20),
+                  IconButton(
+                    icon: const Icon(Icons.radio_button_unchecked, size: 16),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Mark done',
+                    onPressed: () => _markTaskDone(task),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       );
@@ -325,6 +360,18 @@ class TaskListViewState extends State<TaskListView> {
         final tasks = snapshot.data ?? [];
         if (tasks.isEmpty) {
           return Center(child: Text('No tasks in \\${widget.view}.'));
+        }
+        if (widget.view == 'Completed') {
+          return TaskListWidget(
+            tasks: tasks,
+            onMarkDone: _markTaskDone,
+            onEdit: _editTask,
+            onDelete: _confirmDeleteTask,
+            reorderable: false,
+            titleStyle: textTheme.bodySmall,
+            subtitleStyle: textTheme.bodySmall,
+            leadingBuilder: (context, task, idx) => const Icon(Icons.check_box, color: Colors.green),
+          );
         }
         return ListView.builder(
           itemCount: tasks.length,
