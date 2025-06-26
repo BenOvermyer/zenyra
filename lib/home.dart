@@ -4,12 +4,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'views/task_list_view.dart';
-import 'settings_view.dart';
+import 'views/settings_view.dart';
 import 'task_create_dialog.dart';
 
 class TodoHome extends StatefulWidget {
   final String vaultPath;
-  const TodoHome({super.key, required this.vaultPath});
+  final bool isDarkMode;
+  final ValueChanged<bool> onDarkModeChanged;
+  const TodoHome({super.key, required this.vaultPath, required this.isDarkMode, required this.onDarkModeChanged});
 
   @override
   State<TodoHome> createState() => _TodoHomeState();
@@ -136,7 +138,13 @@ class _TodoHomeState extends State<TodoHome> {
       await prefs.setString('vaultPath', selected);
       setState(() {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => TodoHome(vaultPath: selected)),
+          MaterialPageRoute(
+            builder: (_) => TodoHome(
+              vaultPath: selected,
+              isDarkMode: widget.isDarkMode,
+              onDarkModeChanged: widget.onDarkModeChanged,
+            ),
+          ),
         );
       });
     }
@@ -204,7 +212,12 @@ class _TodoHomeState extends State<TodoHome> {
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
               child: _selectedView == 'Settings'
-                  ? SettingsView(onChooseVault: _chooseNewVault, currentVault: widget.vaultPath)
+                  ? SettingsView(
+                      onChooseVault: _chooseNewVault,
+                      currentVault: widget.vaultPath,
+                      isDarkMode: widget.isDarkMode,
+                      onDarkModeChanged: widget.onDarkModeChanged,
+                    )
                   : TaskListView(
                       key: _taskListViewKey,
                       vaultPath: widget.vaultPath,
@@ -213,13 +226,18 @@ class _TodoHomeState extends State<TodoHome> {
             ),
           ],
         ),
-        floatingActionButton: _selectedView != 'Completed' && _selectedView != 'Settings'
-            ? FloatingActionButton(
-                onPressed: _showCreateTaskDialog,
-                tooltip: 'Create Task',
-                child: const Icon(Icons.add),
-              )
-            : null,
+        floatingActionButton: _selectedView != 'Settings' && !_dialogOpen ? FloatingActionButton(
+          onPressed: () {
+            if (_selectedView == 'Today') {
+              final now = DateTime.now();
+              final today = '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+              _showCreateTaskDialog(due: today);
+            } else {
+              _showCreateTaskDialog();
+            }
+          },
+          child: const Icon(Icons.add),
+        ) : null,
       ),
     );
   }
