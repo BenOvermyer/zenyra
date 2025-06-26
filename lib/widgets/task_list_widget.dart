@@ -36,6 +36,9 @@ class TaskListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mutedSubtitleStyle = subtitleStyle?.copyWith(
+      color: (subtitleStyle?.color ?? Theme.of(context).textTheme.bodySmall?.color)?.withValues(alpha: 0.6),
+    );
     Widget buildTile(Task task, {Key? key, int? idx}) {
       final tile = ListTile(
         leading: leadingBuilder != null
@@ -51,7 +54,7 @@ class TaskListWidget extends StatelessWidget {
                   if (showRecurringIcon)
                     const Icon(Icons.repeat, color: Colors.blue),
                   IconButton(
-                    icon: const Icon(Icons.radio_button_unchecked, size: 16),
+                    icon: const Icon(Icons.radio_button_unchecked, size: 22),
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Mark done',
                     onPressed: () => onMarkDone(task),
@@ -68,7 +71,7 @@ class TaskListWidget extends StatelessWidget {
           ],
         ),
         subtitle: task.content.isNotEmpty
-            ? Text(task.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: subtitleStyle)
+            ? Text(task.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: mutedSubtitleStyle)
             : null,
         onTap: () => onEdit(task),
         trailing: IconButton(
@@ -77,11 +80,13 @@ class TaskListWidget extends StatelessWidget {
           onPressed: () => onDelete(task),
         ),
       );
+
+      const Color dividerColor = Color(0x77777777);
       return Column(
         key: key,
         children: [
           tile,
-          const Divider(height: 1, thickness: 1, indent: 20, color: Colors.grey),
+          const Divider(height: 1, thickness: 1, indent: 20, color: dividerColor),
         ],
       );
     }
