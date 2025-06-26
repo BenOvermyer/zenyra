@@ -324,14 +324,27 @@ class TaskListViewState extends State<TaskListView> {
       await oldest.rename(archiveFile.path);
     }
     if (task.recurring != null && task.recurring!.isNotEmpty && task.dueDate != null && task.dueDate!.isNotEmpty) {
-      // When creating the first instance, pass isFirstInstance: true
-      final nextDue = _nextRecurrenceDate(task.dueDate!, task.recurring!, isFirstInstance: false);
+      // When creating the next instance, use today if the task is overdue
+      DateTime baseDate;
+      final dueDate = _parseDueDate(task.dueDate!);
+      final now = DateTime.now();
+      if (dueDate != null && dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
+        baseDate = DateTime(now.year, now.month, now.day);
+      } else {
+        baseDate = dueDate!;
+      }
+      final nextDue = _nextRecurrenceDate(
+        '${baseDate.year.toString().padLeft(4, '0')}-${baseDate.month.toString().padLeft(2, '0')}-${baseDate.day.toString().padLeft(2, '0')}',
+        task.recurring!,
+        isFirstInstance: false,
+      );
       if (nextDue != null) {
         final yyyy = nextDue.year.toString().padLeft(4, '0');
         final mm = nextDue.month.toString().padLeft(2, '0');
         final dd = nextDue.day.toString().padLeft(2, '0');
         final folder = Directory('${widget.vaultPath}/by-date/$yyyy/$mm/$dd');
         if (!await folder.exists()) await folder.create(recursive: true);
+        final safeTitle = task.title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
         final nextFile = File('${folder.path}/$safeTitle-${nextDue.millisecondsSinceEpoch}.md');
         final nextFrontmatter = StringBuffer('---\n');
         nextFrontmatter.writeln('title: "${task.title}"');
