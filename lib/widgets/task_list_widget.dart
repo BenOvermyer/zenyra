@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../task_model.dart';
+import '../models/task_model.dart';
 import 'recurrence_label.dart';
 
 class TaskListWidget extends StatelessWidget {

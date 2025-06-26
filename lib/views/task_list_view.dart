@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'models/upcoming_list_item.dart';
-import 'widgets/recurrence_label.dart';
-import 'task_model.dart';
-import 'task_create_dialog.dart';
-import 'logic/task_list_logic.dart';
-import 'widgets/task_list_widget.dart';
+import '../widgets/recurrence_label.dart';
+import '../models/task_model.dart';
+import '../task_create_dialog.dart';
+import '../logic/task_list_logic.dart';
+import '../widgets/task_list_widget.dart';
+import 'task_list_upcoming_view.dart';
+import 'task_list_today_view.dart';
+import 'task_list_inbox_view.dart';
+import 'task_list_recurring_view.dart';
 
 class TaskListView extends StatefulWidget {
   final String vaultPath;
@@ -25,79 +28,13 @@ class TaskListViewState extends State<TaskListView> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     if (widget.view == 'Upcoming') {
-      final future = TaskListLogic.loadUpcomingItems(widget.vaultPath);
-      return FutureBuilder<List<UpcomingListItem>>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: \\${snapshot.error}', style: textTheme.bodySmall));
-          }
-          final items = snapshot.data ?? [];
-          if (items.isEmpty) {
-            return Center(child: Text('No tasks in \\${widget.view}.', style: textTheme.bodySmall));
-          }
-          // Group items by header and tasks for display
-          final List<Widget> children = [];
-          List<Task> currentGroup = [];
-          String? currentHeader;
-          for (final item in items) {
-            if (item.isHeader) {
-              if (currentGroup.isNotEmpty && currentHeader != null) {
-                children.add(Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                  child: Text(currentHeader, style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
-                ));
-                children.add(TaskListWidget(
-                  tasks: List<Task>.from(currentGroup),
-                  onMarkDone: _markTaskDone,
-                  onEdit: _editTask,
-                  onDelete: _confirmDeleteTask,
-                  titleStyle: textTheme.bodySmall,
-                  subtitleStyle: textTheme.bodySmall,
-                  reorderable: false,
-                  // Prevent nested scrollables
-                  leadingBuilder: null,
-                  // Use shrinkWrap and disable scrolling for inner lists
-                  key: ValueKey(currentHeader),
-                  // Custom build: pass shrinkWrap/physics via a builder
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                ));
-                currentGroup = [];
-              }
-              final date = item.date!;
-              currentHeader = '${_weekdayName(date.weekday)}, ${_monthName(date.month)} ${date.day}, ${date.year}';
-            } else {
-              currentGroup.add(item.task!);
-            }
-          }
-          if (currentGroup.isNotEmpty && currentHeader != null) {
-            children.add(Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              child: Text(currentHeader, style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
-            ));
-            children.add(TaskListWidget(
-              tasks: List<Task>.from(currentGroup),
-              onMarkDone: _markTaskDone,
-              onEdit: _editTask,
-              onDelete: _confirmDeleteTask,
-              titleStyle: textTheme.bodySmall,
-              subtitleStyle: textTheme.bodySmall,
-              reorderable: false,
-              leadingBuilder: null,
-              key: ValueKey(currentHeader),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-            ));
-          }
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 15),
-            children: children,
-          );
-        },
+      return TaskListUpcomingView(
+        vaultPath: widget.vaultPath,
+        textTheme: textTheme,
+        onMarkDone: _markTaskDone,
+        onEdit: _editTask,
+        onDelete: _confirmDeleteTask,
+        reorderable: false,
       );
     }
     if (widget.view == 'Today') {
@@ -106,244 +43,93 @@ class TaskListViewState extends State<TaskListView> {
       final mm = now.month.toString().padLeft(2, '0');
       final dd = now.day.toString().padLeft(2, '0');
       final todayDirPath = '${widget.vaultPath}/by-date/$yyyy/$mm/$dd';
-      final overdueFuture = TaskListLogic.loadOverdueTasks(widget.vaultPath);
-      final todayFuture = TaskListLogic.loadTasksWithOrder(todayDirPath);
-      return FutureBuilder<List<List<Task>>>(
-        future: Future.wait([overdueFuture, todayFuture]),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: \\${snapshot.error}'));
-          }
-          final overdue = snapshot.data?[0] ?? [];
-          final today = snapshot.data?[1] ?? [];
-          if (overdue.isEmpty && today.isEmpty) {
-            return Center(child: Text('No tasks in Today.'));
-          }
-          if (overdue.isNotEmpty && today.isNotEmpty) {
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: Text('Overdue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
-                ),
-                Expanded(
-                  child: TaskListWidget(
-                    tasks: overdue,
-                    onMarkDone: _markTaskDone,
-                    onEdit: _editTask,
-                    onDelete: _confirmDeleteTask,
-                    titleStyle: textTheme.bodySmall,
-                    subtitleStyle: textTheme.bodySmall,
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: Text('Today', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: TaskListWidget(
-                    tasks: today,
-                    onMarkDone: _markTaskDone,
-                    onEdit: _editTask,
-                    onDelete: _confirmDeleteTask,
-                    reorderable: true,
-                    onReorder: (oldIndex, newIndex) async {
-                      setState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = today.removeAt(oldIndex);
-                        today.insert(newIndex, item);
-                      });
-                      await TaskListLogic.saveOrder(today, todayDirPath);
-                    },
-                    showDragHandle: true,
-                    titleStyle: textTheme.bodySmall,
-                    subtitleStyle: textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            );
-          } else if (overdue.isNotEmpty) {
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: Text('Overdue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
-                ),
-                Expanded(
-                  child: TaskListWidget(
-                    tasks: overdue,
-                    onMarkDone: _markTaskDone,
-                    onEdit: _editTask,
-                    onDelete: _confirmDeleteTask,
-                    titleStyle: textTheme.bodySmall,
-                    subtitleStyle: textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            );
-          } else {
-            // today.isNotEmpty
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: Text('Today', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: TaskListWidget(
-                    tasks: today,
-                    onMarkDone: _markTaskDone,
-                    onEdit: _editTask,
-                    onDelete: _confirmDeleteTask,
-                    reorderable: true,
-                    onReorder: (oldIndex, newIndex) async {
-                      setState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = today.removeAt(oldIndex);
-                        today.insert(newIndex, item);
-                      });
-                      await TaskListLogic.saveOrder(today, todayDirPath);
-                    },
-                    showDragHandle: true,
-                    titleStyle: textTheme.bodySmall,
-                    subtitleStyle: textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            );
-          }
+      return TaskListTodayView(
+        vaultPath: widget.vaultPath,
+        textTheme: textTheme,
+        onMarkDone: _markTaskDone,
+        onEdit: _editTask,
+        onDelete: _confirmDeleteTask,
+        reorderable: true,
+        onReorder: (tasks, oldIndex, newIndex) async {
+          setState(() {
+            if (newIndex > oldIndex) newIndex--;
+            final item = tasks.removeAt(oldIndex);
+            tasks.insert(newIndex, item);
+          });
+          await TaskListLogic.saveOrder(tasks, todayDirPath);
         },
       );
     }
     if (widget.view == 'Inbox') {
-      final future = TaskListLogic.loadTasksWithOrder('${widget.vaultPath}/inbox');
-      return FutureBuilder<List<Task>>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: \\${snapshot.error}'));
-          }
-          final tasks = snapshot.data ?? [];
-          if (tasks.isEmpty) {
-            return Center(child: Text('No tasks in Inbox.'));
-          }
-          return TaskListWidget(
-            tasks: tasks,
-            onMarkDone: _markTaskDone,
-            onEdit: _editTask,
-            onDelete: _confirmDeleteTask,
-            reorderable: true,
-            onReorder: (oldIndex, newIndex) async {
-              setState(() {
-                if (newIndex > oldIndex) newIndex--;
-                final item = tasks.removeAt(oldIndex);
-                tasks.insert(newIndex, item);
-              });
-              await TaskListLogic.saveOrder(tasks, '${widget.vaultPath}/inbox');
-            },
-            showDragHandle: true,
-            titleStyle: textTheme.bodySmall,
-            subtitleStyle: textTheme.bodySmall,
-          );
+      return TaskListInboxView(
+        vaultPath: widget.vaultPath,
+        textTheme: textTheme,
+        onMarkDone: _markTaskDone,
+        onEdit: _editTask,
+        onDelete: _confirmDeleteTask,
+        reorderable: true,
+        onReorder: (tasks, oldIndex, newIndex) async {
+          setState(() {
+            if (newIndex > oldIndex) newIndex--;
+            final item = tasks.removeAt(oldIndex);
+            tasks.insert(newIndex, item);
+          });
+          await TaskListLogic.saveOrder(tasks, '${widget.vaultPath}/inbox');
         },
       );
     }
     if (widget.view == 'Recurring') {
-      final future = TaskListLogic.loadRecurringTasks(widget.vaultPath);
-      return FutureBuilder<List<Task>>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: \\${snapshot.error}'));
-          }
-          final tasks = snapshot.data ?? [];
-          if (tasks.isEmpty) {
-            return Center(child: Text('No recurring tasks.'));
-          }
-          // --- Begin: Auto-create missing recurring instances logic ---
-          Future.microtask(() async {
-            bool created = false;
-            for (final task in tasks) {
-              // Only create a new instance if this task is NOT itself a recurring template (i.e., only if it is a dated instance)
-              // Recurring templates should not have a dueDate in the future or present, only in the past (or null)
-              // So, only create a new instance if the dueDate is in the past (before today)
-              if (task.recurring != null && task.recurring!.isNotEmpty && task.dueDate != null && task.dueDate!.isNotEmpty) {
-                final dueDate = _parseDueDate(task.dueDate!);
-                final now = DateTime.now();
-                if (dueDate != null && dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
-                  final nextDue = _nextRecurrenceDate(task.dueDate!, task.recurring!, isFirstInstance: false);
-                  if (nextDue != null) {
-                    final yyyy = nextDue.year.toString().padLeft(4, '0');
-                    final mm = nextDue.month.toString().padLeft(2, '0');
-                    final dd = nextDue.day.toString().padLeft(2, '0');
-                    final folder = Directory('${widget.vaultPath}/by-date/$yyyy/$mm/$dd');
-                    if (!await folder.exists()) await folder.create(recursive: true);
-                    final safeTitle = task.title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-                    // Check if an instance for this title and due date already exists
-                    final files = await folder.list().where((e) => e is File && e.path.endsWith('.md')).cast<File>().toList();
-                    bool instanceExists = false;
-                    for (final file in files) {
-                      final text = await file.readAsString();
-                      final titleMatch = RegExp(r'title:\s*"?([^\"]+)"?').firstMatch(text);
-                      final dueMatch = RegExp(r'due:\s*"?(\d{4}-\d{2}-\d{2})"?').firstMatch(text);
-                      if (titleMatch != null && dueMatch != null &&
-                          titleMatch.group(1)?.trim() == task.title.trim() &&
-                          dueMatch.group(1) == '$yyyy-$mm-$dd') {
-                        instanceExists = true;
-                        break;
-                      }
+      return TaskListRecurringView(
+        vaultPath: widget.vaultPath,
+        textTheme: textTheme,
+        onMarkDone: _markTaskDone,
+        onEdit: _editTask,
+        onDelete: _confirmDeleteTask,
+        onAutoCreateInstances: (tasks) async {
+          // Move the recurring instance creation logic here
+          bool created = false;
+          for (final task in tasks) {
+            if (task.recurring != null && task.recurring!.isNotEmpty && task.dueDate != null && task.dueDate!.isNotEmpty) {
+              final dueDate = _parseDueDate(task.dueDate!);
+              final now = DateTime.now();
+              if (dueDate != null && dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
+                final nextDue = _nextRecurrenceDate(task.dueDate!, task.recurring!, isFirstInstance: false);
+                if (nextDue != null) {
+                  final yyyy = nextDue.year.toString().padLeft(4, '0');
+                  final mm = nextDue.month.toString().padLeft(2, '0');
+                  final dd = nextDue.day.toString().padLeft(2, '0');
+                  final folder = Directory('${widget.vaultPath}/by-date/$yyyy/$mm/$dd');
+                  if (!await folder.exists()) await folder.create(recursive: true);
+                  final safeTitle = task.title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+                  final files = await folder.list().where((e) => e is File && e.path.endsWith('.md')).cast<File>().toList();
+                  bool instanceExists = false;
+                  for (final file in files) {
+                    final text = await file.readAsString();
+                    final titleMatch = RegExp(r'title:\s*"?([^\"]+)"?').firstMatch(text);
+                    final dueMatch = RegExp(r'due:\s*"?(\d{4}-\d{2}-\d{2})"?').firstMatch(text);
+                    if (titleMatch != null && dueMatch != null &&
+                        titleMatch.group(1)?.trim() == task.title.trim() &&
+                        dueMatch.group(1) == '$yyyy-$mm-$dd') {
+                      instanceExists = true;
+                      break;
                     }
-                    if (!instanceExists) {
-                      final nextFile = File('${folder.path}/$safeTitle-${nextDue.millisecondsSinceEpoch}.md');
-                      final nextFrontmatter = StringBuffer('---\n');
-                      nextFrontmatter.writeln('title: "${task.title}"');
-                      nextFrontmatter.writeln('due: "$yyyy-$mm-$dd"');
-                      nextFrontmatter.writeln('recurring: "${task.recurring}"');
-                      nextFrontmatter.writeln('done: false');
-                      nextFrontmatter.writeln('---\n');
-                      await nextFile.writeAsString(nextFrontmatter.toString() + task.content.trim());
-                      created = true;
-                    }
+                  }
+                  if (!instanceExists) {
+                    final nextFile = File('${folder.path}/$safeTitle-${nextDue.millisecondsSinceEpoch}.md');
+                    final nextFrontmatter = StringBuffer('---\n');
+                    nextFrontmatter.writeln('title: "${task.title}"');
+                    nextFrontmatter.writeln('due: "$yyyy-$mm-$dd"');
+                    nextFrontmatter.writeln('recurring: "${task.recurring}"');
+                    nextFrontmatter.writeln('done: false');
+                    nextFrontmatter.writeln('---\n');
+                    await nextFile.writeAsString(nextFrontmatter.toString() + task.content.trim());
+                    created = true;
                   }
                 }
               }
             }
-            if (created && mounted) setState(() {});
-          });
-          // --- End: Auto-create missing recurring instances logic ---
-          return TaskListWidget(
-            tasks: tasks,
-            onMarkDone: _markTaskDone,
-            onEdit: _editTask,
-            onDelete: _confirmDeleteTask,
-            // Recurring tasks always have recurrence, so RecurrenceLabel will be shown in TaskListWidget
-            titleStyle: textTheme.bodySmall,
-            subtitleStyle: textTheme.bodySmall,
-            leadingBuilder: (context, task, idx) => SizedBox(
-              width: 56,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.repeat, color: Colors.blue, size: 20),
-                  IconButton(
-                    icon: const Icon(Icons.radio_button_unchecked, size: 16),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Mark done',
-                    onPressed: () => _markTaskDone(task),
-                  ),
-                ],
-              ),
-            ),
-          );
+          }
+          if (created && mounted) setState(() {});
         },
       );
     }
@@ -406,59 +192,6 @@ class TaskListViewState extends State<TaskListView> {
         );
       },
     );
-  }
-
-  // Helper to build friendly weekday/month names
-  String _weekdayName(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Monday';
-      case 2:
-        return 'Tuesday';
-      case 3:
-        return 'Wednesday';
-      case 4:
-        return 'Thursday';
-      case 5:
-        return 'Friday';
-      case 6:
-        return 'Saturday';
-      case 7:
-        return 'Sunday';
-      default:
-        return '';
-    }
-  }
-
-  String _monthName(int month) {
-    switch (month) {
-      case 1:
-        return 'January';
-      case 2:
-        return 'February';
-      case 3:
-        return 'March';
-      case 4:
-        return 'April';
-      case 5:
-        return 'May';
-      case 6:
-        return 'June';
-      case 7:
-        return 'July';
-      case 8:
-        return 'August';
-      case 9:
-        return 'September';
-      case 10:
-        return 'October';
-      case 11:
-        return 'November';
-      case 12:
-        return 'December';
-      default:
-        return '';
-    }
   }
 
   // The following methods (_editTask, _markTaskDone, _confirmDeleteTask, _loadUpcomingItems, _loadTasks) should be refactored to use TaskListLogic as well.
