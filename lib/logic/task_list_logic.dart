@@ -1,6 +1,6 @@
 import 'dart:io';
 import '../models/upcoming_list_item.dart';
-import '../task_model.dart';
+import '../models/task_model.dart';
 
 /// Provides static methods for loading, parsing, and organizing tasks from the Vault.
 class TaskListLogic {
