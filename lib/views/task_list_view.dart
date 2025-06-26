@@ -9,6 +9,7 @@ import 'task_list_upcoming_view.dart';
 import 'task_list_today_view.dart';
 import 'task_list_inbox_view.dart';
 import 'task_list_recurring_view.dart';
+import 'task_list_completed_view.dart';
 
 class TaskListView extends StatefulWidget {
   final String vaultPath;
@@ -148,15 +149,12 @@ class TaskListViewState extends State<TaskListView> {
           return Center(child: Text('No tasks in \\${widget.view}.'));
         }
         if (widget.view == 'Completed') {
-          return TaskListWidget(
-            tasks: tasks,
+          return TaskListCompletedView(
+            vaultPath: widget.vaultPath,
+            textTheme: textTheme,
             onMarkDone: _markTaskDone,
             onEdit: _editTask,
             onDelete: _confirmDeleteTask,
-            reorderable: false,
-            titleStyle: textTheme.bodySmall,
-            subtitleStyle: textTheme.bodySmall,
-            leadingBuilder: (context, task, idx) => const Icon(Icons.check_box, color: Colors.green),
           );
         }
         return ListView.builder(
@@ -180,7 +178,16 @@ class TaskListViewState extends State<TaskListView> {
                   ],
                 ],
               ),
-              subtitle: task.content.isNotEmpty ? Text(task.content, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
+              subtitle: task.content.isNotEmpty
+                  ? Text(
+                      task.content,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                      ),
+                    )
+                  : null,
               onTap: () => _editTask(task),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
