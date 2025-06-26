@@ -3,7 +3,15 @@ import 'package:flutter/material.dart';
 class SettingsView extends StatelessWidget {
   final VoidCallback onChooseVault;
   final String currentVault;
-  const SettingsView({required this.onChooseVault, required this.currentVault, super.key});
+  final bool isDarkMode;
+  final ValueChanged<bool> onDarkModeChanged;
+  const SettingsView({
+    required this.onChooseVault,
+    required this.currentVault,
+    required this.isDarkMode,
+    required this.onDarkModeChanged,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +31,13 @@ class SettingsView extends StatelessWidget {
             icon: const Icon(Icons.folder_open),
             label: const Text('Choose New Vault Directory'),
             onPressed: onChooseVault,
+          ),
+          const SizedBox(height: 24),
+          SwitchListTile(
+            title: const Text('Dark Mode'),
+            value: isDarkMode,
+            onChanged: onDarkModeChanged,
+            secondary: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
           ),
         ],
       ),
