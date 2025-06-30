@@ -4,7 +4,6 @@ import '../widgets/recurrence_label.dart';
 import '../models/task_model.dart';
 import '../task_create_dialog.dart';
 import '../logic/task_list_logic.dart';
-import '../widgets/task_list_widget.dart';
 import 'task_list_upcoming_view.dart';
 import 'task_list_today_view.dart';
 import 'task_list_inbox_view.dart';
